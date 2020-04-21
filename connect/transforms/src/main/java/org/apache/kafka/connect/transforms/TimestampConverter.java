@@ -79,6 +79,7 @@ public abstract class TimestampConverter<R extends ConnectRecord<R>> implements 
     private static final String TYPE_STRING = "string";
     private static final String TYPE_UNIX = "unix";
     private static final String TYPE_DATE = "Date";
+    private static final String TYPE_AVRO_DATE = "date";
     private static final String TYPE_TIME = "Time";
     private static final String TYPE_TIMESTAMP = "Timestamp";
     private static final Set<String> VALID_TYPES = new HashSet<>(Arrays.asList(TYPE_STRING, TYPE_UNIX, TYPE_DATE, TYPE_TIME, TYPE_TIMESTAMP));
@@ -176,6 +177,25 @@ public abstract class TimestampConverter<R extends ConnectRecord<R>> implements 
                 result.set(Calendar.SECOND, 0);
                 result.set(Calendar.MILLISECOND, 0);
                 return result.getTime();
+            }
+        });
+
+        TRANSLATORS.put(TYPE_AVRO_DATE, new TimestampTranslator() {
+            @Override
+            public Date toRaw(Config config, Object orig) {
+                if (!(orig instanceof Integer))
+                    throw new DataException("Expected Unix timestamp to be a Long, but found " + orig.getClass());
+                return org.apache.kafka.connect.data.Date.toLogical(org.apache.kafka.connect.data.Date.SCHEMA, (Integer) orig);
+            }
+
+            @Override
+            public Schema typeSchema(boolean isOptional) {
+                return isOptional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT32_SCHEMA;
+            }
+
+            @Override
+            public Integer toType(Config config, Date orig) {
+                return org.apache.kafka.connect.data.Date.fromLogical(org.apache.kafka.connect.data.Date.SCHEMA, orig);
             }
         });
 
@@ -409,6 +429,9 @@ public abstract class TimestampConverter<R extends ConnectRecord<R>> implements 
         } else if (schema.type().equals(Schema.Type.INT64)) {
             // If not otherwise specified, long == unix time
             return TYPE_UNIX;
+        } else if (schema.type().equals(Schema.Type.INT32)) {
+            // If not otherwise specified, int == days since epoch, aka avro "date" logicaltype
+            return TYPE_AVRO_DATE;
         }
         throw new ConnectException("Schema " + schema + " does not correspond to a known timestamp type format");
     }
@@ -425,6 +448,8 @@ public abstract class TimestampConverter<R extends ConnectRecord<R>> implements 
             return TYPE_UNIX;
         } else if (timestamp instanceof String) {
             return TYPE_STRING;
+        } else if (timestamp instanceof Integer) {
+            return TYPE_AVRO_DATE;
         }
         throw new DataException("TimestampConverter does not support " + timestamp.getClass() + " objects as timestamps");
     }
