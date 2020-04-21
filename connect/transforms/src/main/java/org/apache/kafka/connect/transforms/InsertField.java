@@ -27,11 +27,17 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.header.Header;
+import org.apache.kafka.connect.header.Headers;
 import org.apache.kafka.connect.transforms.util.SimpleConfig;
 import org.apache.kafka.connect.transforms.util.SchemaUtil;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.ListIterator;
 import java.util.Map;
 
 import static org.apache.kafka.connect.transforms.util.Requirements.requireMap;
@@ -50,6 +56,7 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         String PARTITION_FIELD = "partition.field";
         String OFFSET_FIELD = "offset.field";
         String TIMESTAMP_FIELD = "timestamp.field";
+        String HEADER_FIELD = "header.field";
         String STATIC_FIELD = "static.field";
         String STATIC_VALUE = "static.value";
     }
@@ -65,6 +72,8 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
                     "Field name for Kafka offset - only applicable to sink connectors.<br/>" + OPTIONALITY_DOC)
             .define(ConfigName.TIMESTAMP_FIELD, ConfigDef.Type.STRING, null, ConfigDef.Importance.MEDIUM,
                     "Field name for record timestamp. " + OPTIONALITY_DOC)
+            .define(ConfigName.HEADER_FIELD, ConfigDef.Type.STRING, null, ConfigDef.Importance.MEDIUM,
+                    "Field name for record headers (as json string). " + OPTIONALITY_DOC)
             .define(ConfigName.STATIC_FIELD, ConfigDef.Type.STRING, null, ConfigDef.Importance.MEDIUM,
                     "Field name for static data field. " + OPTIONALITY_DOC)
             .define(ConfigName.STATIC_VALUE, ConfigDef.Type.STRING, null, ConfigDef.Importance.MEDIUM,
@@ -99,6 +108,7 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
     private InsertionSpec partitionField;
     private InsertionSpec offsetField;
     private InsertionSpec timestampField;
+    private InsertionSpec headerField;
     private InsertionSpec staticField;
     private String staticValue;
 
@@ -111,10 +121,11 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         partitionField = InsertionSpec.parse(config.getString(ConfigName.PARTITION_FIELD));
         offsetField = InsertionSpec.parse(config.getString(ConfigName.OFFSET_FIELD));
         timestampField = InsertionSpec.parse(config.getString(ConfigName.TIMESTAMP_FIELD));
+        headerField = InsertionSpec.parse(config.getString(ConfigName.HEADER_FIELD));
         staticField = InsertionSpec.parse(config.getString(ConfigName.STATIC_FIELD));
         staticValue = config.getString(ConfigName.STATIC_VALUE);
 
-        if (topicField == null && partitionField == null && offsetField == null && timestampField == null && staticField == null) {
+        if (topicField == null && partitionField == null && offsetField == null && timestampField == null && staticField == null && headerField == null) {
             throw new ConfigException("No field insertion configured");
         }
 
@@ -136,6 +147,26 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         }
     }
 
+    private String headersToJsonString(Headers headers)
+    {
+        ObjectMapper objectMapper = new ObjectMapper();
+        HashMap<String,Object> headerMap = new HashMap<String,Object>();
+        if (headers != null) {
+            Iterator<Header> iter = headers.iterator();
+            while (iter.hasNext()) {
+                Header header = iter.next();
+                headerMap.put(header.key(), header.value());
+            }
+        }
+
+        try {
+            return objectMapper.writeValueAsString(headerMap);
+        } catch (JsonProcessingException e) {
+            //TODO: handle exception
+        }
+        return "JsonProcessingException";
+    }
+
     private R applySchemaless(R record) {
         final Map<String, Object> value = requireMap(operatingValue(record), PURPOSE);
 
@@ -152,6 +183,9 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         }
         if (timestampField != null && record.timestamp() != null) {
             updatedValue.put(timestampField.name, record.timestamp());
+        }
+        if (headerField != null && record.headers() != null) {
+            updatedValue.put(headerField.name, headersToJsonString(record.headers()));
         }
         if (staticField != null && staticValue != null) {
             updatedValue.put(staticField.name, staticValue);
@@ -187,6 +221,9 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         if (timestampField != null && record.timestamp() != null) {
             updatedValue.put(timestampField.name, new Date(record.timestamp()));
         }
+        if (headerField != null && record.headers() != null) {
+            updatedValue.put(headerField.name, headersToJsonString(record.headers()));
+        }
         if (staticField != null && staticValue != null) {
             updatedValue.put(staticField.name, staticValue);
         }
@@ -212,6 +249,9 @@ public abstract class InsertField<R extends ConnectRecord<R>> implements Transfo
         }
         if (timestampField != null) {
             builder.field(timestampField.name, timestampField.optional ? OPTIONAL_TIMESTAMP_SCHEMA : Timestamp.SCHEMA);
+        }
+        if (headerField != null) {
+            builder.field(headerField.name, headerField.optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
         }
         if (staticField != null) {
             builder.field(staticField.name, staticField.optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);

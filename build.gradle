@@ -1617,6 +1617,8 @@ project(':connect:transforms') {
     compile project(':connect:api')
     compile libs.slf4jApi
 
+    compileOnly libs.jacksonDatabind // for SASL/OAUTHBEARER bearer token parsing
+
     testCompile libs.easymock
     testCompile libs.junit
     testCompile libs.powermockJunit4
