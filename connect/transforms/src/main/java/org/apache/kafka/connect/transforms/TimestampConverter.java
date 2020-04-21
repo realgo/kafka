@@ -185,6 +185,16 @@ public abstract class TimestampConverter<R extends ConnectRecord<R>> implements 
             public Date toRaw(Config config, Object orig) {
                 if (!(orig instanceof Integer))
                     throw new DataException("Expected Unix timestamp to be a Long, but found " + orig.getClass());
+                
+                Integer i = (Integer)orig;
+
+                if( i > ((9999-1970) * 365)) //should this be 365.25?
+                    throw new DataException("Max Date year is 9999, int value " + i.toString() + " is too big");
+
+                
+                if( i < ((1970-1753) * -365)) //should this be 365.25?
+                    throw new DataException("Min Date year is 1753, int value " + i.toString() + " is too small");
+                    
                 return org.apache.kafka.connect.data.Date.toLogical(org.apache.kafka.connect.data.Date.SCHEMA, (Integer) orig);
             }
 
