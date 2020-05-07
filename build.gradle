@@ -46,7 +46,9 @@ spotless {
   scala {
     target 'streams/**/*.scala'
     scalafmt("$versions.scalafmt").configFile('checkstyle/.scalafmt.conf')
+    enforceCheck false
   }
+  enforceCheck false
 }
 
 

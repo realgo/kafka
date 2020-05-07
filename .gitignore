@@ -56,3 +56,8 @@ clients/src/generated-test
 jmh-benchmarks/generated
 jmh-benchmarks/src/main/generated
 streams/src/generated
+connect/mirror/bin
+connect/runtime/bin
+connect/transforms/build.gradle
+connect/basic-auth-extension/bin
+tools/bin
